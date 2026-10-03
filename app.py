@@ -1,54 +1,44 @@
 import streamlit as st
-from dotenv import load_dotenv
-from PyPDF2 import PdfReader
-
-from langchain_community.vectorstores import FAISS
-from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
-from langchain_ollama import OllamaEmbeddings, OllamaLLM
+from langchain.memory import ConversationBufferMemory
+from langchain_ollama import OllamaLLM
 
-
-def get_pdf_text(pdf_docs):
-    text = ""
-    for pdf in pdf_docs:
-        reader = PdfReader(pdf)
-        for page in reader.pages:
-            text += page.extract_text() or ""
-    return text
+from rag import (DEFAULT_TOP_K, LLM_MODEL, build_index, chunk_documents,
+                 get_embeddings, load_pdf_pages)
 
 
 def main():
     st.set_page_config(page_title="Custom Q&A Chatbot")
     st.header("Chat with your PDFs")
 
-    pdf_docs = st.file_uploader("Upload PDFs", accept_multiple_files=True)
+    pdf_docs = st.file_uploader("Upload PDFs", accept_multiple_files=True, type="pdf")
 
-    if st.button("Process"):
-        raw_text = get_pdf_text(pdf_docs)
-        embeddings = OllamaEmbeddings(model="nomic-embed-text")
-        vectorstore = FAISS.from_texts([raw_text], embedding=embeddings)
-
-        llm = OllamaLLM(model="llama3.2")
-
+    if st.button("Process") and pdf_docs:
+        with st.spinner("Chunking and indexing..."):
+            pages = load_pdf_pages(pdf_docs)
+            chunks = chunk_documents(pages)
+            index = build_index(chunks, get_embeddings("ollama"))
         memory = ConversationBufferMemory(
-            memory_key="chat_history", return_messages=True
+            memory_key="chat_history", return_messages=True, output_key="answer"
         )
-
-        conversation = ConversationalRetrievalChain.from_llm(
-            llm=llm,
-            retriever=vectorstore.as_retriever(),
-            memory=memory
+        st.session_state.conversation = ConversationalRetrievalChain.from_llm(
+            llm=OllamaLLM(model=LLM_MODEL),
+            retriever=index.as_retriever(search_kwargs={"k": DEFAULT_TOP_K}),
+            memory=memory,
+            return_source_documents=True,
         )
-
-        st.session_state.conversation = conversation
+        st.success(f"Indexed {len(pages)} pages as {len(chunks)} chunks.")
 
     if "conversation" in st.session_state:
         user_question = st.text_input("Ask a question:")
         if user_question:
             response = st.session_state.conversation({"question": user_question})
             st.write(response["answer"])
+            with st.expander("Sources"):
+                for doc in response["source_documents"]:
+                    st.markdown(f"**{doc.metadata['source']}, page {doc.metadata['page']}**")
+                    st.caption(doc.page_content[:400])
 
 
 if __name__ == "__main__":
-    load_dotenv()
     main()
