@@ -39,11 +39,22 @@ class HashingEmbeddings(Embeddings):
         return self._embed(text)
 
 
-def get_embeddings(name: str = "ollama") -> Embeddings:
+def get_embeddings(name: str = "ollama", batch_size: int = 16) -> Embeddings:
     if name == "hash":
         return HashingEmbeddings()
     from langchain_ollama import OllamaEmbeddings
-    return OllamaEmbeddings(model=EMBED_MODEL)
+
+    class BatchedOllamaEmbeddings(OllamaEmbeddings):
+        """Sends documents in small batches: one request with hundreds of
+        chunks can crash the Ollama runner (connection reset)."""
+
+        def embed_documents(self, texts: List[str]) -> List[List[float]]:
+            out: List[List[float]] = []
+            for i in range(0, len(texts), batch_size):
+                out += super().embed_documents(texts[i:i + batch_size])
+            return out
+
+    return BatchedOllamaEmbeddings(model=EMBED_MODEL)
 
 
 def load_pdf_pages(pdf_files: Iterable, source_names: Iterable[str] = None) -> List[Document]:

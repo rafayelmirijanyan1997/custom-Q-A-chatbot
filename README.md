@@ -39,15 +39,20 @@ python evaluate.py --embedders hash ollama --chunk-sizes 400 800 1600
 
 ### Results
 
-Lexical baseline (run on 2026-10-03):
+Run on 2026-11-25 (32 questions, top-4 retrieval, MacBook, Ollama `nomic-embed-text`):
 
-| embedder | chunk_size | chunks | hit@1 | hit@4 | mrr |
-|---|---|---|---|---|---|
-| hash | 400 | 893 | 0.625 | 0.781 | 0.695 |
-| hash | 800 | 474 | 0.594 | 0.812 | 0.682 |
-| hash | 1600 | 258 | 0.625 | 0.75 | 0.667 |
+| embedder | chunk_size | chunks | hit@1 | hit@4 | mrr | ms_per_query |
+|---|---|---|---|---|---|---|
+| hash | 400 | 890 | 0.656 | 0.781 | 0.711 | 0.3 |
+| hash | 800 | 473 | 0.656 | 0.812 | 0.711 | 0.1 |
+| hash | 1600 | 258 | 0.625 | 0.75 | 0.667 | 0.1 |
+| ollama | 400 | 890 | 0.719 | 0.938 | 0.812 | 9.3 |
+| ollama | 800 | 473 | 0.75 | 1.0 | 0.859 | 9.2 |
+| ollama | 1600 | 258 | 0.688 | 0.906 | 0.766 | 10.1 |
 
-Run the command above with Ollama running to add the `nomic-embed-text` rows; the full table is written to `eval/results.md`.
+- Semantic embeddings beat the lexical baseline at every chunk size. At 800 characters, `nomic-embed-text` puts a gold page in the top 4 for **all 32 questions** (hit@4 1.00 vs 0.81) and raises MRR from 0.71 to 0.86.
+- 800-character chunks score best. Smaller chunks split the answers across chunks; larger ones dilute the embedding.
+- Query latency is about 9 ms, which is the Ollama embedding call; FAISS search itself is under 1 ms.
 
 ## Author
 
